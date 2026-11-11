@@ -3,6 +3,7 @@ package com.bakdata.conquery.models.common;
 import java.time.LocalDate;
 import java.time.YearMonth;
 
+import com.bakdata.conquery.models.common.daterange.CDateRange;
 import com.google.common.primitives.Ints;
 import lombok.experimental.UtilityClass;
 
@@ -17,7 +18,7 @@ public final class CDate {
 	public int ofLocalDate(LocalDate date) {
 		return Ints.checkedCast(date.toEpochDay());
 	}
-	
+
 	public int ofLocalDate(LocalDate date, int defaultValue) {
 		if(date == null) {
 			return defaultValue;
@@ -38,11 +39,11 @@ public final class CDate {
 	}
 
 	public boolean isPositiveInfinity(int epochDay) {
-		return epochDay == Integer.MAX_VALUE;
+		return epochDay == CDateRange.POSITIVE_INFINITY;
 	}
 
 	public boolean isNegativeInfinity(int epochDay) {
-		return epochDay == Integer.MIN_VALUE;
+		return epochDay == CDateRange.NEGATIVE_INFINITY;
 	}
 
 }

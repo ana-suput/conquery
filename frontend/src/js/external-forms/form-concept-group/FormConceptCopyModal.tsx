@@ -1,65 +1,63 @@
-import styled from "@emotion/styled";
-import { StateT } from "app-types";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useFormContext } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import { useSelector } from "react-redux";
-
+import { tv } from "tailwind-variants";
 import type { SelectOptionT } from "../../api/types";
-import PrimaryButton from "../../button/PrimaryButton";
-import { TransparentButton } from "../../button/TransparentButton";
 import { exists } from "../../common/helpers/exists";
 import { useActiveLang } from "../../localization/useActiveLang";
-import Modal from "../../modal/Modal";
-import InputCheckbox from "../../ui-components/InputCheckbox";
-import InputSelect from "../../ui-components/InputSelect/InputSelect";
+import { Button } from "../../ui-components/Button";
+import { CheckboxField } from "../../ui-components/CheckboxField";
+import { ComboBoxField } from "../../ui-components/ComboBoxField";
 import {
-  selectActiveFormValues,
-  useVisibleConceptListFields,
-} from "../stateSelectors";
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+} from "../../ui-components/Modal";
+import { useVisibleConceptListFields } from "../stateSelectors";
 
-const Buttons = styled("div")`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  margin-top: 20px;
-`;
+import type { FormConceptGroupT } from "./formConceptGroupState";
 
-const Options = styled("div")`
-  padding: 8px 0 0 28px;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  max-height: 345px;
-`;
+const selectAll = tv({ base: "mt-[10px] ml-2" });
 
-const SelectAllCheckbox = styled(InputCheckbox)`
-  margin: 10px 0 0 8px;
-`;
+const options = tv({
+  base: [
+    "flex flex-col gap-1",
+    "pt-2 pl-[28px]",
+    "max-h-[345px]",
+    "overflow-y-auto",
+    "[-webkit-overflow-scrolling:touch]",
+  ],
+});
 
-const SxInputCheckbox = styled(InputCheckbox)`
-  margin: 5px 0;
-`;
-
-interface PropsT {
+type CopyProps = {
   targetFieldname: string;
-  onAccept: (selectedNodes: Object[]) => void;
-  onClose: () => void;
-}
+  onAccept: (selectedNodes: FormConceptGroupT[]) => void;
+};
 
-const FormConceptCopyModal = ({
+// rendered only while the modal is open, so the form values are read on open
+const FormConceptCopyModalContent = ({
   targetFieldname,
   onAccept,
-  onClose,
-}: PropsT) => {
+  close,
+}: CopyProps & { close: () => void }) => {
   const { t } = useTranslation();
   const activeLang = useActiveLang();
-  const formValues = useSelector<StateT, Record<string, any>>((state) =>
-    selectActiveFormValues(state),
-  );
+  const { getValues } = useFormContext();
+  const formValues = getValues(); // Isn't watching for changes
   const visibleConceptListFields = useVisibleConceptListFields();
 
   const conceptListFieldOptions = visibleConceptListFields
-    .filter((field) => field.name !== targetFieldname)
+    .filter((field) => {
+      const isAnotherField = field.name !== targetFieldname;
+      const hasValues =
+        formValues[field.name] &&
+        formValues[field.name]
+          .flatMap((v: FormConceptGroupT) => v.concepts)
+          .some(exists);
+
+      return isAnotherField && hasValues;
+    })
     .map((field) => ({
       label: field.label[activeLang] || "-",
       value: field.name,
@@ -76,17 +74,13 @@ const FormConceptCopyModal = ({
   }>({});
 
   useEffect(() => {
-    const values = formValues[selectedOption.value] as unknown[];
-    const initiallyChecked = values.reduce<{ [key: string]: boolean }>(
-      (checkedValues, _, i) => {
-        checkedValues[String(i)] = false;
-        return checkedValues;
-      },
-      {},
+    const values = getValues()[selectedOption.value] as unknown[];
+    const initiallyChecked = Object.fromEntries(
+      values.map((_, i) => [String(i), false]),
     );
 
     setValuesChecked(initiallyChecked);
-  }, [selectedOption]);
+  }, [selectedOption, getValues]);
 
   const allConceptsSelected = Object.keys(valuesChecked).every(
     (key) => valuesChecked[key],
@@ -117,10 +111,7 @@ const FormConceptCopyModal = ({
 
   function onToggleAllConcepts() {
     const allChecked = Object.fromEntries(
-      Object.entries(valuesChecked).map(([key]) => [
-        key,
-        allConceptsSelected ? false : true,
-      ]),
+      Object.entries(valuesChecked).map(([key]) => [key, !allConceptsSelected]),
     );
 
     setValuesChecked(allChecked);
@@ -136,56 +127,68 @@ const FormConceptCopyModal = ({
   }
 
   function onSubmit() {
-    const selectedValues = Object.keys(valuesChecked)
-      .filter((key) => valuesChecked[key])
-      .map((key) => formValues[selectedOption.value][key]);
+    const selectedNodes = Object.keys(valuesChecked)
+      .filter((index) => valuesChecked[index])
+      .map(
+        (index) => formValues[selectedOption.value][index] as FormConceptGroupT,
+      );
 
-    onAccept(selectedValues);
-    onClose();
+    onAccept(selectedNodes);
+    close();
   }
 
   return (
-    <Modal
-      onClose={onClose}
-      closeIcon
-      headline={t("externalForms.copyModal.headline")}
-    >
-      <InputSelect
-        label={t("externalForms.copyModal.selectLabel")}
-        options={conceptListFieldOptions}
-        onChange={(val) => {
-          if (val) setSelectedOption(val);
-        }}
-        value={selectedOption}
-      />
-      <SelectAllCheckbox
-        label={t("externalForms.copyModal.selectAll")}
-        input={{ value: allConceptsSelected, onChange: onToggleAllConcepts }}
-      />
-      <Options>
-        {Object.keys(valuesChecked).map((idx) =>
-          idxHasConcepts(idx) ? (
-            <SxInputCheckbox
-              key={idx}
-              label={getLabelFromIdx(idx)}
-              input={{
-                value: valuesChecked[idx],
-                onChange: (checked: boolean) => onToggleConcept(idx, checked),
-              }}
-            />
-          ) : null,
-        )}
-      </Options>
-      <Buttons>
-        <TransparentButton onClick={onClose}>
-          {t("common.cancel")}
-        </TransparentButton>
-        <PrimaryButton onClick={onSubmit} disabled={isAcceptDisabled}>
+    <>
+      <ModalHeader>{t("externalForms.copyModal.headline")}</ModalHeader>
+      <ModalBody>
+        <ComboBoxField
+          label={t("externalForms.copyModal.selectLabel")}
+          options={conceptListFieldOptions}
+          onChange={(val) => {
+            if (val) setSelectedOption(val);
+          }}
+          value={selectedOption}
+        />
+        <div className={selectAll()}>
+          <CheckboxField
+            isSelected={allConceptsSelected}
+            onChange={onToggleAllConcepts}
+          >
+            {t("externalForms.copyModal.selectAll")}
+          </CheckboxField>
+        </div>
+        <div className={options()}>
+          {Object.keys(valuesChecked).map((idx) =>
+            idxHasConcepts(idx) ? (
+              <CheckboxField
+                key={idx}
+                isSelected={valuesChecked[idx]}
+                onChange={(checked: boolean) => onToggleConcept(idx, checked)}
+              >
+                {getLabelFromIdx(idx)}
+              </CheckboxField>
+            ) : null,
+          )}
+        </div>
+      </ModalBody>
+      <ModalFooter>
+        <Button slot="close">{t("common.cancel")}</Button>
+        <Button
+          intent="primary"
+          onPress={onSubmit}
+          isDisabled={isAcceptDisabled}
+        >
           {t("externalForms.copyModal.accept")}
-        </PrimaryButton>
-      </Buttons>
-    </Modal>
+        </Button>
+      </ModalFooter>
+    </>
   );
 };
+
+const FormConceptCopyModal = (props: CopyProps) => (
+  <Modal>
+    {({ close }) => <FormConceptCopyModalContent {...props} close={close} />}
+  </Modal>
+);
 
 export default FormConceptCopyModal;
